@@ -1,0 +1,92 @@
+---
+title: "linear_models"
+author: "Xicheng Xie"
+date: "2022-11-10"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(p8105.datasets)
+
+set.seed(1)
+```
+
+## model fitting
+
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb %>% 
+  mutate(stars = review_scores_location / 2) %>% 
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) %>% 
+  filter(borough != "Staten Island") %>% 
+  select(price, stars, borough, neighborhood, room_type)
+```
+
+```{r}
+fit=lm(price~stars+borough,data = nyc_airbnb)
+summary(fit) %>% 
+  broom::tidy()
+```
+
+let's change reference category
+```{r}
+fit=
+  nyc_airbnb %>% 
+  mutate(
+    borough=fct_infreq(borough)
+  ) %>% 
+  lm(price~stars+borough,data=.) %>%
+  broom::tidy() %>% 
+  select(term, estimate, p.value) %>% 
+  mutate(term = str_replace(term, "^borough", "Borough: ")) %>% 
+  knitr::kable(digits = 3)
+```
+
+
+## Diagnositics
+
+```{r}
+fit=lm(price~stars+borough,data = nyc_airbnb)
+nyc_airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x=borough,y=resid))+
+  geom_violin()+
+  ylim(-250,500)
+```
+
+## hypothesis testing
+
+one coefficient
+```{r}
+fit_null = lm(price ~ stars + borough, data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough + room_type, data = nyc_airbnb)
+anova(fit_null, fit_alt) %>% 
+  broom::tidy()
+```
+
+## Room type by borough
+```{r}
+fit<-
+  nyc_airbnb %>% 
+  lm(price~stars+borough*room_type,data=.) %>% 
+  broom::tidy() 
+```
+
+```{r}
+nyc_airbnb %>% 
+  nest(df=-borough) %>% 
+  mutate(
+    models=map(.x=df,~lm(price~stars+room_type,data =.x)),
+    results=map(models,broom::tidy)
+         ) %>% 
+  select(borough,results) %>% 
+  unnest(results)
+```
+Quick double check
+
